@@ -7,8 +7,8 @@ jobs:
   package-db:
     runs-on: ubuntu-latest
     permissions:
-      packages: write
       contents: read
+      packages: write   # required for GHCR
 
     env:
       PACKAGE_NAME: database
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Generate version number
+      - name: Generate version number (YY.1.buildNumber)
         id: version
         run: |
           YEAR=$(date +'%y')
@@ -25,21 +25,36 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Zip src/Database
+      - name: Create ZIP package from src/Database
         run: |
           mkdir -p build
           zip -r build/${PACKAGE_NAME}-${VERSION}.zip src/Database
 
-      - name: Log in to GHCR
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push ZIP as OCI package to GHCR
+      - name: Install ORAS CLI
+        run: |
+          curl -sSfL https://github.com/oras-project/oras/releases/latest/download/oras_linux_amd64.tar.gz -o oras.tar.gz
+          tar -xzf oras.tar.gz -C /usr/local/bin oras
+          chmod +x /usr/local/bin/oras
+          oras version
+
+      - name: Push ZIP to GitHub Packages (GHCR) as OCI Artifact
         run: |
           cd build
           oras push ghcr.io/${{ github.repository_owner }}/${PACKAGE_NAME}:${VERSION} \
             --artifact-type application/zip \
             ${PACKAGE_NAME}-${VERSION}.zip
+
+          # Optional: also tag 'latest'
+          oras tag ghcr.io/${{ github.repository_owner }}/${PACKAGE_NAME}:${VERSION} latest
+
+      - name: Output package location
+        run: |
+          echo "Pushed to: ghcr.io/${{ github.repository_owner }}/${PACKAGE_NAME}:${VERSION}"
+          echo "Latest tag also updated."
