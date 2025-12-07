@@ -1,5 +1,5 @@
 ###############################################
-# TERRAFORM: FULLY AUTOMATED SQL SERVER RDS
+# TERRAFORM: FULLY SELF-CONTAINED RDS SQLSERVER
 ###############################################
 
 terraform {
@@ -9,18 +9,18 @@ terraform {
       version = "~> 5.0"
     }
     random = {
-      source = "hashicorp/random"
+      source  = "hashicorp/random"
       version = "~> 3.0"
     }
   }
 }
 
 provider "aws" {
-  region = "eu-west-2"
+  region = "eu-west-2" # London
 }
 
 ###############################################
-# RANDOM GENERATED VALUES
+# RANDOM VALUES (NO USER INPUT)
 ###############################################
 
 resource "random_pet" "db_name" {
@@ -40,34 +40,64 @@ resource "random_password" "password" {
 }
 
 ###############################################
-# USE DEFAULT VPC + DEFAULT SUBNETS
+# VPC + SUBNETS + INTERNET + ROUTING
 ###############################################
 
-data "aws_vpc" "default" {
-  default = true
+resource "aws_vpc" "main" {
+  cidr_block = "10.10.0.0/16"
 }
 
-data "aws_subnets" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
+resource "aws_subnet" "subnet_a" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.10.1.0/24"
+  availability_zone       = "eu-west-2a"
+  map_public_ip_on_launch = true
+}
+
+resource "aws_subnet" "subnet_b" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.10.2.0/24"
+  availability_zone       = "eu-west-2b"
+  map_public_ip_on_launch = true
+}
+
+resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_route_table" "rt" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.gw.id
   }
 }
 
+resource "aws_route_table_association" "a" {
+  subnet_id      = aws_subnet.subnet_a.id
+  route_table_id = aws_route_table.rt.id
+}
+
+resource "aws_route_table_association" "b" {
+  subnet_id      = aws_subnet.subnet_b.id
+  route_table_id = aws_route_table.rt.id
+}
+
 ###############################################
-# SECURITY GROUP – ALLOW SQL SERVER
+# SECURITY GROUP – ALLOW SQLSERVER (1433)
 ###############################################
 
 resource "aws_security_group" "sql_sg" {
-  name        = "sql-server-auto-sg"
+  name        = "sql-server-sg"
   description = "Allow SQL Server access"
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = aws_vpc.main.id
 
   ingress {
     from_port   = 1433
     to_port     = 1433
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # Adjust if needed
+    cidr_blocks = ["0.0.0.0/0"] # unrestricted since you don't care
   }
 
   egress {
@@ -83,12 +113,15 @@ resource "aws_security_group" "sql_sg" {
 ###############################################
 
 resource "aws_db_subnet_group" "sql_subnets" {
-  name       = "sql-default-subnets"
-  subnet_ids = data.aws_subnets.default.ids
+  name       = "rds-subnet-group"
+  subnet_ids = [
+    aws_subnet.subnet_a.id,
+    aws_subnet.subnet_b.id
+  ]
 }
 
 ###############################################
-# RDS INSTANCE (SQL SERVER EXPRESS – FREE TIER)
+# RDS SQL SERVER EXPRESS (FREE TIER)
 ###############################################
 
 resource "aws_db_instance" "sqlserver" {
