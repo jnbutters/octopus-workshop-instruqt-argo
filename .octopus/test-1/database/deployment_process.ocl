@@ -1,27 +1,3 @@
-step "sql-create-database-if-not-exists" {
-    name = "SQL - Create Database If Not Exists"
-
-    action {
-        properties = {
-            createCommandTimeout = "30"
-            createDatabaseName = "#{SQLServer.Database.Name}"
-            createSqlDatabaseRetryAttempts = "0"
-            createSqlLoginPasswordWhoHasRights = "#{SQLServer.Database.Password}"
-            createSqlLoginUserWhoHasCreateUserRights = "#{SQLServer.Database.UserName}"
-            createSqlServer = "#{SQLServer.Database.Host}"
-            Octopus.Action.Template.Id = "ActionTemplates-2"
-            Octopus.Action.Template.Version = "5"
-            OctopusUseBundledTooling = "False"
-        }
-        worker_pool = "hosted-ubuntu"
-
-        container {
-            feed = "docker-hub"
-            image = "octopusdeploy/worker-tools:6.5.0-ubuntu.22.04"
-        }
-    }
-}
-
 process_template "run-a-process-template" {
     name = "Run a Process Template"
     process_template_slug = "flyway-database-migration"
